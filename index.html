@@ -50,8 +50,10 @@ body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;color:
 #stk{position:absolute;inset:0}
 .st{position:absolute;left:0;top:0;touch-action:none;transition:opacity .35s ease}
 .st svg{display:block;width:100%;height:100%;pointer-events:none}
-.st.pop{animation:pop .45s cubic-bezier(.2,1.4,.4,1) both}
-@keyframes pop{from{opacity:0;transform:var(--t) scale(.4)}to{opacity:1;transform:var(--t) scale(1)}}
+.st.pop{animation:pop 1.3s cubic-bezier(.3,.1,.25,1) both}
+.st.pop svg{animation:form 1.3s cubic-bezier(.3,.1,.25,1) both}
+@keyframes pop{from{opacity:0;transform:var(--t) scale(.88)}40%{opacity:.6}to{opacity:1;transform:var(--t) scale(1)}}
+@keyframes form{from{filter:blur(14px)}to{filter:blur(0)}}
 .st.sel::after{content:'';position:absolute;inset:-6px;border:1.5px dashed rgba(255,255,255,.95);border-radius:10px;box-shadow:0 0 0 1px rgba(43,16,11,.25);pointer-events:none}
 .st .hd{display:none;position:absolute;right:-17px;bottom:-17px;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3);touch-action:none}
 .st .hd::before{content:'';position:absolute;left:8px;top:8px;width:12px;height:12px;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);border-radius:0 0 2px 0}
@@ -173,13 +175,15 @@ CART.sort((a,b)=>(a.t==='t')-(b.t==='t'));                        // POD/QUICK �
 // 그래픽 번호: 키오스크에서 받은 것 우선, 없으면 seed로 뽑기
 const okId=o=>o.id&&SH[o.id]&&SH[o.id].cls===CLS[o.c];
 const used=new Set(CART.filter(okId).map(o=>o.id));
-const POOL={}; for(const k in CLS) POOL[k]=shuffle(IDS[k],RND).filter(id=>!used.has(id));
+const RARE={10:.3};   // 덜 나오게 할 그래픽 (번호: 나올 확률 비율)
+function wshuffle(a,r){ return a.map(id=>({id,k:Math.pow(r(),1/(RARE[id]||1))})).sort((x,y)=>y.k-x.k).map(o=>o.id); }
+const POOL={}; for(const k in CLS) POOL[k]=wshuffle(IDS[k],RND).filter(id=>!used.has(id));
 CART.forEach(o=>{ if(!okId(o)){ o.id=POOL[o.c].shift()||IDS[o.c][0]; used.add(o.id);} o.big=o.t!=='t'; });
 
 /* ---------- 그리드 규칙 ---------- */
-// 테이크어웨이만 → 2×2 / POD·QUICK 하나만 → 1×4 / 2~3개 → 3×3 / 4개 이상(POD·QUICK 포함) → 5×5 / 환기 제품 없음 → 대지 1
+// 2개 → 2×2 (두 그래픽이 엇갈려 반복) / 테이크어웨이만 → 2×2 / POD·QUICK 하나만 → 1×4 / 2~3개 → 3×3 / 4개 이상(POD·QUICK 포함) → 5×5 / 환기 제품 없음 → 대지 1
 const N=CART.length, HAS_SP=CART.some(o=>o.big);
-const GRID = !N ? 'none' : !HAS_SP ? '2x2' : N===1 ? '1x4' : N<=3 ? '3x3' : '5x5';
+const GRID = !N ? 'none' : (N===2||!HAS_SP) ? '2x2' : N===1 ? '1x4' : N===3 ? '3x3' : '5x5';
 const PITCH={'2x2':1.08,'3x3':1.08,'5x5':1.45,'1x4':1.9};
 
 function sp(sh,cx,cy){ // one shape centered at (cx,cy), 1000 units
@@ -199,10 +203,10 @@ function buildPattern(){
   if(GRID==='none'){ GFXS=['s','t','b'].map(c=>({id:shuffle(IDS[c],RND)[0],big:false})); return {inner:D1,w:2442.9,h:380.21}; }
   const cells=[]; const P=PITCH[GRID]*1000; let cols, rows;
   if(GRID==='2x2'){
-    const ids=CART.map(o=>o.id); let k=0;
+    const ids=N===2 ? [CART[0].id,CART[1].id,CART[1].id,CART[0].id] : CART.map(o=>o.id); let k=0;   // 2개면 A B / B A
     while(ids.length<4){ const c=CART[k++%N].c; const n=POOL[c].shift(); if(n) ids.push(n); else ids.push(IDS[c][Math.floor(RND()*IDS[c].length)]); }
     ids.slice(0,4).forEach((id,i)=>cells.push({c:i%2,r:Math.floor(i/2),sh:{k:'g',id}}));
-    GFXS=ids.slice(0,4).map((id,i)=>({id,big:false})); cols=rows=2;
+    GFXS=N===2 ? CART.map(o=>({id:o.id,big:o.big})) : ids.slice(0,4).map(id=>({id,big:false})); cols=rows=2;
   } else if(GRID==='1x4'){
     SEQ4(CART[0].id).forEach((sh,i)=>cells.push({c:i,r:0,sh})); cols=4; rows=1;
     GFXS=[{id:CART[0].id,big:true}];
@@ -252,7 +256,9 @@ const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
 
 async function grow(){
   const box=$('pbox'), cv=$('pcv'); const dpr=Math.min(2.5,devicePixelRatio||1);
-  const rb=box.getBoundingClientRect(); const BW=rb.width,BH=rb.height, W=Math.round(BW*dpr), H=Math.round(BH*dpr); cv.width=W; cv.height=H;
+  let rb=box.getBoundingClientRect();
+  for(let i=0;i<30&&(rb.width<2||rb.height<2);i++){ await new Promise(r=>setTimeout(r,100)); fit(); rb=box.getBoundingClientRect(); }
+  const BW=rb.width>=2?rb.width:281, BH=rb.height>=2?rb.height:330, W=Math.max(2,Math.round(BW*dpr)), H=Math.max(2,Math.round(BH*dpr)); cv.width=W; cv.height=H;
   const im=await svgImg(patSVG('#000'),W,H);
   const m=document.createElement('canvas'); m.width=W; m.height=H; const mx=m.getContext('2d'); mx.drawImage(im,0,0,W,H);
   const a=mx.getImageData(0,0,W,H).data; const ins=new Uint8Array(W*H); for(let i=0;i<W*H;i++) ins[i]=a[i*4+3]>110?1:0;
@@ -315,8 +321,8 @@ const BX=16, BY=119, CW=370, CH=600;   // 피그마 기준 박스 (화면에서�
 const box=()=>{ const r=$('cbox').getBoundingClientRect(); return {w:r.width,h:r.height,l:r.left,t:r.top}; };
 const LAY={ // [그리드 고쳐야함 1] 5×5 · [2-1/2-2] 2×2·3×3 · [3] 1×5
   '5x5':{tag:[120,152,151,27], pat:[77,368,244,249]},
-  '3x3':{pat:[140,321,113,105], tag:[140,442,113,20]},
-  '2x2':{pat:[140,321,113,105], tag:[140,442,113,20]},
+  '3x3':{pat:[122,294,157,146], tag:[122,462,157,28]},
+  '2x2':{pat:[122,294,157,146], tag:[122,462,157,28]},
   '1x4':{tag:[120,152,151,27], pat:[43,390,315,37]},
   'none':{tag:[120,152,151,27], pat:[43,390,315,49]},
 };
@@ -329,8 +335,16 @@ function overlaySVG(col){ const L=LAY[GRID]; const [px,py,pw,ph]=L.pat, [tx,ty,t
 
 /* ---------- 스티커 ---------- */
 const domeInner=`<path transform="${DOME_T}" d="${DOME.d}"/>`;
-function stickerSVG(id){ // #fcf1c2 돔 위에 카카오색 그래픽
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-500 -500 1000 1000"><g fill="${CFG.YELLOW}">${domeInner}</g><g transform="scale(.76)" fill="${CFG.INK}" fill-rule="evenodd"><path d="${SH[id].d}"/></g></svg>`; }
+const STK_BG="M19.7 499.3L-18.9 499.6L-57.6 494.6L-96.3 484.8L-140.6 467.5L-175.3 449.4L-219.6 420.4L-261.5 387.5L-299.7 353.3L-353.7 299.4L-388.3 260.7L-421.2 218.8L-450.2 174.5L-471.6 132.6L-487.2 90.7L-496.3 52.8L-500.4 17.3L-499.6 -28.6L-493.0 -68.9L-480.0 -112.4L-463.5 -150.3L-442.1 -188.2L-417.8 -223.8L-385.9 -263.9L-344.9 -309.0L-294.1 -359.0L-254.2 -394.0L-218.0 -422.0L-174.5 -450.2L-132.6 -471.6L-89.8 -487.2L-55.2 -495.5L-10.9 -500.4L23.0 -499.6L62.4 -493.8L93.9 -485.6L135.8 -469.6L176.1 -448.6L221.2 -418.7L260.7 -387.5L300.2 -352.1L351.3 -301.0L386.7 -261.5L422.0 -216.4L447.8 -176.9L468.3 -137.4L477.6 -115.6L485.6 -92.3L494.6 -55.2L499.6 -10.1L498.8 23.8L492.2 66.5L479.4 110.0L466.4 141.4L449.4 173.7L426.8 209.1L393.1 253.4L357.8 293.7L308.2 344.1L268.7 380.3L229.4 412.2L187.3 441.3L163.2 455.5L136.6 468.8L100.3 483.2L68.1 492.2L47.1 496.3Z";
+// 시각 보정: 그래픽의 무게중심(칠해진 면적의 중심)을 배경 가운데에 맞춤
+const CEN={};
+function centroid(id){ if(CEN[id]) return CEN[id]; const c=document.createElement('canvas'); c.width=c.height=200; const x=c.getContext('2d');
+  x.setTransform(.2,0,0,.2,100,100); x.fill(new Path2D(SH[id].d),'evenodd'); const a=x.getImageData(0,0,200,200).data; let sx=0,sy=0,n=0;
+  for(let i=3;i<a.length;i+=4) if(a[i]>127){ const p=(i-3)/4; sx+=p%200; sy+=(p/200)|0; n++; }
+  const cx=n?(sx/n-100)*5:0, cy=n?(sy/n-100)*5:0; return CEN[id]=[Math.max(-90,Math.min(90,cx)),Math.max(-90,Math.min(90,cy))]; }
+function stickerSVG(id){ // #fcf1c2 배경 위에 카카오색 그래픽
+  const [cx,cy]=centroid(id), k=.72;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-500 -500 1000 1000"><path fill="${CFG.YELLOW}" d="${STK_BG}"/><g transform="translate(${(-cx*k).toFixed(1)} ${(-cy*k).toFixed(1)}) scale(${k})" fill="${CFG.INK}" fill-rule="evenodd"><path d="${SH[id].d}"/></g></svg>`; }
 let STK=null; // [{id,x,y,s,el}]
 function initStickers(){
   const b=box(), k=b.w/CW;
@@ -375,7 +389,7 @@ function setMode(m){
   if(m==='sticker'){
     $('ovl').style.opacity=0; if(!STK) initStickers();
     $('stk').style.pointerEvents='auto';
-    STK.forEach((o,i)=>{ o.el.classList.remove('pop'); o.el.style.opacity=0; setTimeout(()=>{ o.el.style.opacity=''; void o.el.offsetWidth; o.el.classList.add('pop'); },120+i*140); });
+    STK.forEach((o,i)=>{ o.el.classList.remove('pop'); o.el.style.opacity=0; setTimeout(()=>{ o.el.style.opacity=''; void o.el.offsetWidth; o.el.classList.add('pop'); },120+i*260); });
     $('hint').classList.remove('hide'); clearTimeout(hintT); hintT=setTimeout(hideHint,5000);
   } else {
     $('ovl').innerHTML=overlaySVG(m==='yellow'?CFG.YELLOW:CFG.INK); $('ovl').style.opacity=1;
