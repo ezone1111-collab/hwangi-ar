@@ -455,10 +455,11 @@ async function shoot(){
   const f=$('flash'); f.style.transition='none'; f.style.opacity=.85; requestAnimationFrame(()=>{ f.style.transition='opacity .5s'; f.style.opacity=0; });
   // [iPhone 18 Pro - 14] 사진 틀: 카카오색 틀(320.34×554) 안 회색 자리(275.12×475.80)에 사진, 아래에 nooc 로고 → 틀과 함께 저장
   const F=4, FW=Math.round(320.34*F), FH=Math.round(554*F), fc=document.createElement('canvas'); fc.width=FW; fc.height=FH; const fx=fc.getContext('2d');
-  fx.fillStyle='#2B100B'; fx.fillRect(0,0,FW,FH);
+  const FRC=MODE==='cacao'?CFG.INK:CFG.YELLOW, LGC=MODE==='cacao'?CFG.YELLOW:CFG.INK;   // Yellow: 노란 틀+갈색 로고 / Cacao: 갈색 틀+노란 로고
+  fx.fillStyle=FRC; fx.fillRect(0,0,FW,FH);
   const gx=22.61*F, gy=19.79*F, gw=275.12*F, gh=475.80*F, s2=Math.max(gw/W,gh/H);
   fx.save(); fx.beginPath(); fx.rect(gx,gy,gw,gh); fx.clip(); fx.drawImage(c,gx+(gw-W*s2)/2,gy+(gh-H*s2)/2,W*s2,H*s2); fx.restore();
-  try{ const lg=await svgImg(FRAME_LOGO,Math.round(82.18*F),Math.round(21.67*F)); fx.drawImage(lg,118.71*F,512.54*F,82.18*F,21.67*F); }catch(e){ console.warn(e); }
+  try{ const lg=await svgImg(FRAME_LOGO.replace(/#FCF1C2/gi,LGC),Math.round(82.18*F),Math.round(21.67*F)); fx.drawImage(lg,118.71*F,512.54*F,82.18*F,21.67*F); }catch(e){ console.warn(e); }
   lastBlob=await new Promise(r=>fc.toBlob(r,'image/jpeg',.93)); if(lastURL) URL.revokeObjectURL(lastURL); lastURL=URL.createObjectURL(lastBlob);
   $('rimg').src=lastURL; $('rbg').src=lastURL;
   setTimeout(()=>{ go('s-res'); stopCam(); },250);
